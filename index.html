@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Instructor's Choice Math</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0d6e6e">
+<link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<style>html{color-scheme:light}body{margin:0}</style>
+
+<style>
+/* Layout: one centered column (max 34rem). Home -> Question -> Results, plus an Instructor area behind a menu button. */
+:root{
+  --bg:#f3f6f8; --panel:#ffffff; --fg:#17232b; --muted:#5b6b75; --line:#d5dee4;
+  --accent:#0d6e6e; --accent-fg:#ffffff; --accent-soft:#dff0ef;
+  --good:#1a7f45; --good-soft:#dcf3e4; --bad:#b3341f; --bad-soft:#fbe4df;
+  --key:#e8eef2; --key-press:#d3dde4;
+  --flash-opacity:.8; /* 0 = invisible, 1 = solid; change to tweak the green flash */
+  --font:ui-rounded,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10181d; --panel:#192329; --fg:#e6eef2; --muted:#93a4ae; --line:#2b3942;
+  --accent:#4fc1bd; --accent-fg:#06201f; --accent-soft:#17383a;
+  --good:#5fd08b; --good-soft:#163a25; --bad:#ff8a73; --bad-soft:#40201a;
+  --key:#223038; --key-press:#2e414b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10181d; --panel:#192329; --fg:#e6eef2; --muted:#93a4ae; --line:#2b3942;
+  --accent:#4fc1bd; --accent-fg:#06201f; --accent-soft:#17383a;
+  --good:#5fd08b; --good-soft:#163a25; --bad:#ff8a73; --bad-soft:#40201a;
+  --key:#223038; --key-press:#2e414b; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 var(--font);padding-inline:16px;padding-block:16px 32px}
+#app{max-width:34rem;margin-inline:auto}
+h1{font-size:1.5rem;margin:0 0 .25rem;text-wrap:balance}
+h2{font-size:1.1rem;margin:0 0 .5rem}
+.sub{color:var(--muted);margin:0 0 1rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-block:12px}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+select,input[type=text],input[type=number]{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+input[type=number]{font-variant-numeric:tabular-nums}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--key);color:var(--fg);padding:10px 14px;min-height:44px}
+button:hover{background:var(--key-press)}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.link{background:none;border:none;color:var(--accent);text-decoration:underline;min-height:0;padding:4px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1 1 9rem;min-width:0}
+.row>button{flex:0 0 auto}
+.note{font-size:.85rem;color:var(--muted)}
+.err{color:var(--bad);font-weight:600;margin:.5rem 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(6.5rem,1fr));gap:8px}
+.stat{background:var(--bg);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.75rem;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+.q{font-size:clamp(2.2rem,11vw,3.4rem);text-align:center;font-weight:700;font-variant-numeric:tabular-nums;padding:20px 0 8px;letter-spacing:.02em}
+.ans{min-height:3.6rem;text-align:center;font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;border-bottom:3px solid var(--accent);margin:0 auto 14px;max-width:12rem}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pad button{min-height:56px;font-size:1.5rem;font-weight:600}
+.pad .wide{grid-column:1/-1;font-size:1.2rem}
+.flash{position:fixed;inset:0;pointer-events:none;background:var(--good-soft);opacity:0}
+.flash.on{opacity:var(--flash-opacity)}
+.wrong{background:var(--bad-soft);border:1px solid var(--bad);border-radius:12px;padding:16px;text-align:center}
+.wrong .big{font-size:2rem;font-weight:700}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.gridwrap{overflow-x:auto;max-width:100%}
+table.g{border-collapse:collapse;font-size:.8rem}
+table.g th{color:var(--muted);font-weight:600;padding:2px 4px;text-align:center}
+table.g td{padding:1px}
+table.g input{width:2.5rem;padding:4px 2px;text-align:center;font-size:.85rem}
+table.g input:disabled{opacity:.35}
+table.g tr.lbl th:first-child{text-align:right}
+table.goal th,table.goal td{padding:4px}
+table.goal th{text-align:left;font-size:.85rem;font-weight:600;white-space:nowrap}
+table.goal input{width:4.2rem;text-align:center}
+.res{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.res .stat{padding:8px 6px;text-align:center}
+.res .stat b{font-size:1.15rem}
+.res .stat span{font-size:.65rem;display:block;line-height:1.2}
+.opw{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.opw .nm{display:none}
+@media (min-width:480px){.opw .nm{display:inline}.opw .sy{display:none}}
+.opw label{text-align:center}
+.opw input{text-align:center;padding-inline:4px}
+.menuwrap{position:relative}
+.menubtn{width:44px;padding:0;font-size:1.3rem;line-height:1}
+.menu{position:absolute;right:0;top:48px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:5;min-width:9rem;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.menu button{width:100%;text-align:left}
+.hist{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums}
+.hist th,.hist td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.hist th:nth-child(n+3),.hist td:nth-child(n+3){text-align:center}
+</style>
+
+<div id="app"></div>
+<div class="flash" id="flash"></div>
+
+<script>
+"use strict";
+/* ============ constants ============ */
+var MAXN = 12;                       // largest operand (code parameter)
+var N = MAXN + 1;                    // grid size
+var OPS = ["Addition","Subtraction","Multiplication","Division"];
+var SYM = {Addition:"+",Subtraction:"−",Multiplication:"×",Division:"÷"};
+var METRICS = ["Correct Response Count","% Correct Responses","Correct Response Streak","Avg Response Time"];
+var KEY = "arithmeticPractice";
+var DATA_VERSION = 1;
+var LOCKOUT_MS = 500;
+
+/* ============ storage layer (swap this out later for a bigger store) ============ */
+var Store = {
+  mem: null,
+  read: function(){
+    try { var raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); } catch(e){}
+    return this.mem ? JSON.parse(this.mem) : null;
+  },
+  write: function(obj){
+    var s = JSON.stringify(obj);
+    this.mem = s;
+    try { localStorage.setItem(KEY, s); return true; } catch(e){ return false; }
+  }
+};
+
+function makeGrid(v){ var g=[]; for(var a=0;a<N;a++){ g.push(new Array(N).fill(v)); } return g; }  // grid[A][B]
+function makeStudent(name){
+  var grids = {}, sets = {}, topicOps = {};
+  OPS.forEach(function(op){
+    grids[op] = { Unity: makeGrid(1), Instructor: makeGrid(1) };
+    sets[op] = { Unity: { a: new Array(N).fill(1), b: new Array(N).fill(1) } };
+    topicOps[op] = { primary:1, secondary:1, auto:false, operandSet:"Unity", grid:"Unity" };
+  });
+  var cells = METRICS.map(function(){ return [null,null,null,null]; });
+  cells[0][0] = 20; cells[1][0] = 90;   // stretch goal
+  cells[0][3] = 40; cells[1][3] = 60;   // Fallback goal
+  return {
+    name: name,
+    topics: { "Default Topic": { ops: topicOps } },
+    operandSets: sets,
+    grids: grids,
+    goals: { "Default Goal": { cells: cells, cap: 20 } },
+    lessonPlans: { "Default Lesson Plan": { topic:"Default Topic", goal:"Default Goal" } },
+    practices: []
+  };
+}
+function migrate(d){
+  if (!d || typeof d !== "object") return null;
+  if (!d.version) d.version = 1;
+  // future: if (d.version < 2) { ...; d.version = 2; }
+  return d;
+}
+var db = migrate(Store.read());
+if (!db || !db.students) {
+  db = { version: DATA_VERSION, active: "Student 1", students: {} };
+  db.students["Student 1"] = makeStudent("Student 1");
+}
+function save(){ Store.write(db); }
+var ctx = null;                      // Student whose data the current screen uses
+var homeSel = null, instrSel = null; // selections are not remembered between visits
+function defaultSel(){ var k = Object.keys(db.students); return k.length === 1 ? k[0] : null; }
+homeSel = defaultSel();
+function student(){ return db.students[ctx]; }
+function menuHtml(label, id){
+  return '<div class="menuwrap"><button class="menubtn" id="menubtn" aria-label="Menu" aria-expanded="false">\u2630</button><div class="menu" id="menu" hidden><button id="'+id+'">'+label+'</button></div></div>';
+}
+function bindMenu(){
+  $("menubtn").onclick = function(e){ e.stopPropagation(); var m = $("menu"); m.hidden = !m.hidden; this.setAttribute("aria-expanded", String(!m.hidden)); };
+  document.onclick = function(){ var m = $("menu"); if (m && !m.hidden){ m.hidden = true; $("menubtn").setAttribute("aria-expanded","false"); } };
+}
+
+/* ============ question selection ============ */
+function cellWeights(st, topic, op){
+  var t = topic.ops[op];
+  var grid = st.grids[op][t.grid] || st.grids[op].Unity;
+  var set = st.operandSets[op][t.operandSet] || st.operandSets[op].Unity;
+  var w = [], total = 0;
+  for (var a=0;a<N;a++){ w.push([]);
+    for (var b=0;b<N;b++){
+      var v = grid[a][b] * set.a[a] * set.b[b];
+      if (op === "Division" && a === 0) v = 0;
+      if (!(v > 0)) v = 0;
+      w[a].push(v); total += v;
+    }
+  }
+  return { w:w, total:total };
+}
+function pickIndex(weights){
+  var total = 0; weights.forEach(function(x){ total += x; });
+  if (!(total > 0)) return -1;
+  var r = Math.random() * total, acc = 0;
+  for (var i=0;i<weights.length;i++){ acc += weights[i]; if (r < acc) return i; }
+  for (var j=weights.length-1;j>=0;j--) if (weights[j] > 0) return j;
+  return -1;
+}
+function buildPlan(st, lp){
+  var topic = st.topics[lp.topic], cw = {}, opW = [];
+  OPS.forEach(function(op){
+    var t = topic.ops[op];
+    cw[op] = cellWeights(st, topic, op);
+    var w = t.primary * t.secondary;
+    opW.push(cw[op].total > 0 && w > 0 ? w : 0);
+  });
+  return { cw: cw, opW: opW };
+}
+function nextQuestion(plan){
+  var oi = pickIndex(plan.opW); var op = OPS[oi];
+  var flat = [], idx = [];
+  var w = plan.cw[op].w;
+  for (var a=0;a<N;a++) for (var b=0;b<N;b++){ flat.push(w[a][b]); idx.push([a,b]); }
+  var p = idx[pickIndex(flat)], a2 = p[0], b2 = p[1], text, ans;
+  if (op === "Addition"){ text = a2+" + "+b2; ans = a2+b2; }
+  else if (op === "Subtraction"){ text = (a2+b2)+" − "+a2; ans = b2; }
+  else if (op === "Multiplication"){ text = a2+" × "+b2; ans = a2*b2; }
+  else { text = (a2*b2)+" ÷ "+a2; ans = b2; }
+  return { op:op, a:a2, b:b2, text:text, answer:ans };
+}
+
+/* ============ goal ============ */
+function metricsOf(p){
+  var total = p.correct + p.incorrect;
+  return {
+    "Correct Response Count": p.correct,
+    "% Correct Responses": total ? 100*p.correct/total : 0,
+    "Correct Response Streak": p.streak,
+    "Avg Response Time": total ? p.timeSum/total : null
+  };
+}
+function goalMet(goal, p){
+  var m = metricsOf(p);
+  for (var c=0;c<4;c++){
+    var any = false, ok = true;
+    for (var r=0;r<4;r++){
+      var th = goal.cells[r][c];
+      if (th === null || th === "" || th === undefined) continue;
+      any = true;
+      var v = m[METRICS[r]];
+      if (r === 3){ if (v === null || v > th) ok = false; }
+      else if (v < th) ok = false;
+    }
+    if (any && ok) return true;
+  }
+  return false;
+}
+function goalValid(goal){
+  var n = 0;
+  for (var r=0;r<4;r++) for (var c=0;c<4;c++){ var v = goal.cells[r][c]; if (v !== null && v !== "" && v !== undefined) n++; }
+  return n > 0;
+}
+
+/* ============ ui helpers ============ */
+var app = document.getElementById("app");
+var screen = "home";
+var P = null;                        // current practice
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+function fmtTime(s){ return s === null ? "–" : s.toFixed(1)+" s"; }
+function fmtPct(x){ return Math.round(x)+"%"; }
+function fmtDur(ms){ var s = Math.round(ms/1000); return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2); }
+function $(id){ return document.getElementById(id); }
+
+/* ============ home ============ */
+function showHome(msg){
+  screen = "home"; P = null; ctx = homeSel;
+  var st = student();
+  var names = Object.keys(db.students);
+  var lps = st ? Object.keys(st.lessonPlans) : [];
+  var h = '<div class="top"><h1>Arithmetic Practice</h1>'+menuHtml("Instructor","instr")+'</div>';
+  h += '<div class="panel"><div class="row"><div><label for="stu">Student</label><select id="stu">';
+  if (!st) h += '<option value="">Select a Student\u2026</option>';
+  names.forEach(function(n){ h += '<option'+(n===homeSel?' selected':'')+'>'+esc(n)+'</option>'; });
+  h += '</select></div><div><label for="lp">Lesson Plan</label><select id="lp"'+(st?'':' disabled')+'>';
+  if (!st) h += '<option>\u2013</option>';
+  lps.forEach(function(n){ h += '<option>'+esc(n)+'</option>'; });
+  h += '</select></div></div>';
+  if (msg) h += '<p class="err" role="alert">'+msg+'</p>';
+  h += '<p><button class="primary" id="start" style="width:100%;font-size:1.2rem">Start Practice</button></p></div>';
+  h += '<p class="note">Progress is saved in this browser on this device. Clearing the browser\u2019s site data erases it.</p>';
+  app.innerHTML = h;
+  $("stu").onchange = function(){ homeSel = this.value || null; showHome(); };
+  $("start").onclick = function(){ if (!homeSel) return showHome("Select a Student first."); startPractice($("lp").value); };
+  bindMenu();
+  $("instr").onclick = function(){ instrSel = defaultSel(); showInstructor("topic"); };
+}
+
+/* ============ practice ============ */
+function startPractice(lpName){
+  ctx = homeSel; var st = student(), lp = st.lessonPlans[lpName];
+  var goal = st.goals[lp.goal];
+  if (!goalValid(goal)) return showHome("The Goal needs at least one threshold. Fix it in the Instructor menu.");
+  var plan = buildPlan(st, lp);
+  if (!plan.opW.some(function(w){return w>0;})) return showHome("No Operation can be asked. Give at least one Operation a Primary Weight above 0 and a grid with a weight above 0 (in Division, Operand A can't be 0).");
+  P = { who:homeSel, lp:lpName, goal:goal, plan:plan, cap:goal.cap, correct:0, incorrect:0, streak:0, longest:0, timeSum:0,
+        start:Date.now(), perm:{}, q:null, t0:0, input:"", over:false, lockUntil:0 };
+  askNext();
+}
+function askNext(){
+  P.q = nextQuestion(P.plan); P.input = ""; P.t0 = performance.now(); screen = "question"; renderQuestion();
+}
+function statsHtml(){
+  var m = metricsOf(P);
+  return '<div class="stats">'+
+   '<div class="stat"><b>'+P.correct+'</b><span>Correct</span></div>'+
+   '<div class="stat"><b>'+(P.correct+P.incorrect ? fmtPct(m["% Correct Responses"]) : "–")+'</b><span>% Correct</span></div>'+
+   '<div class="stat"><b>'+P.streak+'</b><span>Streak</span></div>'+
+   '<div class="stat"><b>'+P.incorrect+'</b><span>Incorrect</span></div></div>';
+}
+function renderQuestion(){
+  var h = '<div class="top"><button class="link" id="quit">Quit</button><span class="note">'+esc(P.lp)+'</span></div>';
+  h += '<div class="panel">'+statsHtml()+'<div class="q" aria-live="polite">'+esc(P.q.text)+' = ?</div><div class="ans" id="ans">'+esc(P.input)+'</div>';
+  h += '<div class="pad">';
+  [7,8,9,4,5,6,1,2,3].forEach(function(d){ h += '<button data-k="'+d+'" aria-label="'+d+'">'+d+'</button>'; });
+  h += '<button data-k="back" aria-label="Backspace">⌫</button><button data-k="0" aria-label="0">0</button><span></span>';
+  h += '<button class="primary wide" data-k="submit">Submit</button></div></div>';
+  app.innerHTML = h;
+  $("quit").onclick = function(){ if (confirmQuit()){ homeSel = defaultSel(); showHome(); } };
+  Array.prototype.forEach.call(app.querySelectorAll("[data-k]"), function(b){
+    b.onclick = function(){ press(b.getAttribute("data-k")); };
+  });
+}
+var quitArmed = false, flashT = 0;
+function confirmQuit(){
+  // no browser dialogs: first click arms, second click quits
+  var b = $("quit");
+  if (!quitArmed){ quitArmed = true; b.textContent = "Quit? Progress won’t be saved. Tap again"; setTimeout(function(){ quitArmed=false; if($("quit")) $("quit").textContent="Quit"; }, 3000); return false; }
+  quitArmed = false; return true;
+}
+function press(k){
+  if (screen !== "question") return;
+  if (k === "submit") return submit();
+  if (k === "back") P.input = P.input.slice(0,-1);
+  else if (P.input.length < 4) P.input += k;
+  var a = $("ans"); if (a) a.textContent = P.input;
+}
+function submit(){
+  if (P.input === "") return;
+  var elapsed = Math.min((performance.now() - P.t0)/1000, P.cap);
+  var ok = parseInt(P.input,10) === P.q.answer;
+  var key = P.q.op+"|"+P.q.a+"|"+P.q.b, e = P.perm[key] || (P.perm[key] = {op:P.q.op,a:P.q.a,b:P.q.b,asked:0,right:0,timeSum:0});
+  e.asked++; e.timeSum += elapsed; if (ok) e.right++;
+  P.timeSum += elapsed;
+  if (ok){ P.correct++; P.streak++; if (P.streak > P.longest) P.longest = P.streak; }
+  else { P.incorrect++; P.streak = 0; }
+  P.over = goalMet(P.goal, P);
+  if (ok){
+    var f = $("flash"); f.classList.add("on"); clearTimeout(flashT); flashT = setTimeout(function(){ f.classList.remove("on"); }, 200);
+    if (P.over) return finish(); else return askNext();
+  }
+  screen = "feedback"; P.lockUntil = performance.now() + LOCKOUT_MS; renderFeedback();
+}
+function renderFeedback(){
+  var h = '<div class="top"><span></span><span class="note">'+esc(P.lp)+'</span></div><div class="panel">'+statsHtml()+'</div>';
+  h += '<div class="wrong"><div class="note">Not quite</div><div class="big">'+esc(P.q.text)+' = '+P.q.answer+'</div><p>You answered '+esc(P.input)+'.</p>';
+  h += '<button class="primary" id="next" style="width:100%">Next</button><p class="note">Tap anywhere, press any key or Enter to continue.</p></div>';
+  app.innerHTML = h;
+}
+function advance(){
+  if (screen !== "feedback" || performance.now() < P.lockUntil) return;
+  if (P.over) finish(); else askNext();
+}
+function finish(){
+  var st = db.students[P.who], n = P.correct + P.incorrect, m = metricsOf(P);
+  var results = Object.keys(P.perm).map(function(k){ var e = P.perm[k];
+    return { op:e.op, a:e.a, b:e.b, asked:e.asked, pctCorrect:100*e.right/e.asked, avgTime:e.timeSum/e.asked }; });
+  var rec = { when:Date.now(), lessonPlan:P.lp, correct:P.correct, pctCorrect:m["% Correct Responses"], longestStreak:P.longest,
+              avgTime:m["Avg Response Time"], incorrect:P.incorrect, durationMs:Date.now()-P.start, results:results };
+  st.practices.push(rec); save();
+  screen = "results";
+  var avgs = results.map(function(x){ return x.avgTime; });
+  var fastest = avgs.length ? Math.min.apply(null,avgs) : null, slowest = avgs.length ? Math.max.apply(null,avgs) : null;
+  function cell(v,l){ return '<div class="stat"><b>'+v+'</b><span>'+l+'</span></div>'; }
+  var h = '<h1>Practice complete</h1><p class="sub">'+esc(P.who)+' · '+esc(P.lp)+'</p><div class="panel"><div class="res">'+
+   cell(fmtPct(rec.pctCorrect),'% Correct')+cell(rec.correct,'Correct')+cell(rec.incorrect,'Incorrect')+cell(rec.longestStreak,'Longest Streak')+
+   cell(fmtTime(rec.avgTime),'Avg Response Time')+cell(fmtTime(fastest),'Fastest')+cell(fmtTime(slowest),'Slowest')+cell(fmtDur(rec.durationMs),'Total Time')+'</div></div>';
+  var recent = st.practices.slice(-5).reverse();
+  h += '<div class="panel"><h2>Recent Practices</h2><div class="gridwrap"><table class="hist"><tr><th>When</th><th>Plan</th><th>Correct</th><th>%</th><th>Avg time</th></tr>';
+  recent.forEach(function(r){
+    h += '<tr><td>'+esc(new Date(r.when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))+'</td><td>'+esc(r.lessonPlan)+'</td><td>'+r.correct+'</td><td>'+fmtPct(r.pctCorrect)+'</td><td>'+fmtTime(r.avgTime)+'</td></tr>';
+  });
+  h += '</table></div></div>';
+  h += '<p><button class="primary" id="done" style="width:100%">Done</button></p>';
+  app.innerHTML = h; $("done").onclick = function(){ homeSel = defaultSel(); showHome(); };
+}
+document.addEventListener("keydown", function(e){
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (screen === "question"){
+    if (/^[0-9]$/.test(e.key)){ press(e.key); e.preventDefault(); }
+    else if (e.key === "Backspace"){ press("back"); e.preventDefault(); }
+    else if (e.key === "Enter"){ press("submit"); e.preventDefault(); }
+  } else if (screen === "feedback"){
+    if (["Shift","Control","Alt","Meta","Tab"].indexOf(e.key) >= 0) return;
+    advance(); e.preventDefault();
+  }
+});
+document.addEventListener("click", function(e){ if (screen === "feedback"){ advance(); } });
+
+/* ============ instructor ============ */
+var instrTab = "topic", instrOp = "Addition";
+function showInstructor(tab, msg){
+  screen = "instructor"; instrTab = tab || instrTab; ctx = instrSel;
+  var h = '<div class="top"><h1>Instructor</h1>'+menuHtml("Student page","tohome")+'</div>';
+  h += '<div class="row" style="margin-bottom:10px"><div><label for="istu">Student</label><select id="istu">';
+  if (!instrSel) h += '<option value="">Select a Student\u2026</option>';
+  Object.keys(db.students).forEach(function(n){ h += '<option'+(n===instrSel?' selected':'')+'>'+esc(n)+'</option>'; });
+  h += '</select></div></div>';
+  h += '<div class="tabs">';
+  [["topic","Topic"],["goal","Goal"],["students","Students"]].forEach(function(t){
+    h += '<button data-tab="'+t[0]+'" aria-pressed="'+(instrTab===t[0])+'">'+t[1]+'</button>'; });
+  h += '</div>';
+  if (msg) h += '<p class="err" role="alert">'+msg+'</p>';
+  var needs = !instrSel && instrTab !== "students";
+  if (needs) h += '<p class="note">Select a Student above to edit their '+instrTab+'.</p>';
+  else if (instrTab === "topic") h += topicHtml(); else if (instrTab === "goal") h += goalHtml(); else h += studentsHtml();
+  app.innerHTML = h;
+  bindMenu();
+  $("tohome").onclick = function(){ homeSel = defaultSel(); showHome(); };
+  $("istu").onchange = function(){ instrSel = this.value || null; showInstructor(); };
+  Array.prototype.forEach.call(app.querySelectorAll("[data-tab]"), function(b){ b.onclick = function(){ showInstructor(b.getAttribute("data-tab")); }; });
+  if (needs) return;
+  if (instrTab === "topic") bindTopic(); else if (instrTab === "goal") bindGoal(); else bindStudents();
+}
+function topicHtml(){
+  var st = student(), topic = st.topics["Default Topic"], t = topic.ops[instrOp];
+  var h = '<div class="panel"><h2>Default Topic</h2><p class="note">Primary Weight sets how often each Operation is asked. The grid sets how often each Operand A and Operand B pair is asked. A weight of 0 means never.</p>';
+  h += '<h2 style="font-size:.95rem;margin-top:12px">Operation Weight (Primary)</h2><div class="opw">';
+  OPS.forEach(function(op){
+    h += '<div><label for="pw-'+op+'" aria-label="'+op+' Primary Weight"><span class="nm">'+op+'</span><span class="sy">'+SYM[op]+'</span></label><input type="number" min="0" step="any" id="pw-'+op+'" value="'+topic.ops[op].primary+'"></div>'; });
+  h += '</div></div>';
+  h += '<div class="panel"><h2>Permutation grid</h2><div class="tabs">';
+  OPS.forEach(function(op){ h += '<button data-op="'+op+'" aria-pressed="'+(instrOp===op)+'">'+op+'</button>'; });
+  h += '</div><div class="row"><div><label for="gsel">Grid used for '+instrOp+'</label><select id="gsel"><option'+(t.grid==="Unity"?" selected":"")+'>Unity</option><option'+(t.grid==="Instructor"?" selected":"")+'>Instructor</option></select></div></div>';
+  var editable = t.grid === "Instructor";
+  var grid = st.grids[instrOp].Instructor;
+  h += '<p class="note">'+(editable ? 'Columns are Operand A, rows are Operand B. Edit the Instructor grid below.' : 'Unity gives every pair the same weight (1). Choose Instructor to edit weights.')+(instrOp==="Division"?' In Division, Operand A = 0 is never asked.':'')+'</p>';
+  h += '<div class="gridwrap"><table class="g"><tr class="lbl"><th>B \\ A</th>';
+  for (var a=0;a<N;a++) h += '<th>'+a+'</th>'; h += '</tr>';
+  var show = editable ? grid : st.grids[instrOp].Unity;
+  for (var b=0;b<N;b++){ h += '<tr><th>'+b+'</th>';
+    for (var a2=0;a2<N;a2++){
+      var dis = !editable || (instrOp==="Division" && a2===0);
+      h += '<td><input type="number" min="0" step="any" data-a="'+a2+'" data-b="'+b+'" aria-label="Operand A '+a2+', Operand B '+b+'" value="'+show[a2][b]+'"'+(dis?' disabled':'')+'></td>'; }
+    h += '</tr>'; }
+  h += '</table></div>';
+  if (editable){
+    h += '<div class="row" style="margin-top:10px"><div><label for="setall">Set every cell to</label><input type="number" min="0" step="any" id="setall" value="1"></div><button id="applyall">Apply</button></div>';
+  }
+  h += '</div>';
+  return h;
+}
+function bindTopic(){
+  var st = student(), topic = st.topics["Default Topic"];
+  OPS.forEach(function(op){ $("pw-"+op).onchange = function(){
+    var v = parseFloat(this.value); if (!(v >= 0)){ return showInstructor("topic","Weights must be 0 or more."); }
+    topic.ops[op].primary = v; save(); }; });
+  Array.prototype.forEach.call(app.querySelectorAll("[data-op]"), function(b){ b.onclick = function(){ instrOp = b.getAttribute("data-op"); showInstructor("topic"); }; });
+  $("gsel").onchange = function(){ topic.ops[instrOp].grid = this.value; save(); showInstructor("topic"); };
+  Array.prototype.forEach.call(app.querySelectorAll("table.g input"), function(inp){
+    inp.onchange = function(){
+      var v = parseFloat(this.value);
+      if (!(v >= 0)){ return showInstructor("topic","Weights must be 0 or more."); }
+      st.grids[instrOp].Instructor[+this.getAttribute("data-a")][+this.getAttribute("data-b")] = v; save(); };
+  });
+  if ($("applyall")) $("applyall").onclick = function(){
+    var v = parseFloat($("setall").value); if (!(v >= 0)) return showInstructor("topic","Weights must be 0 or more.");
+    st.grids[instrOp].Instructor = makeGrid(v); save(); showInstructor("topic"); };
+}
+function goalHtml(){
+  var g = student().goals["Default Goal"];
+  var h = '<div class="panel"><h2>Default Goal</h2><p class="note">A Practice ends when any column is fully met. All filled cells in a column must be met. Leave a cell blank to skip it. Count, % and Streak are met at or above the number. Avg Response Time is met at or below it (seconds).</p>';
+  h += '<div class="gridwrap"><table class="goal"><tr><th></th>';
+  for (var c=0;c<4;c++) h += '<th>Criteria'+(c+1)+'</th>'; h += '</tr>';
+  METRICS.forEach(function(m,r){ h += '<tr><th>'+m+'</th>';
+    for (var c2=0;c2<4;c2++){ var v = g.cells[r][c2];
+      h += '<td><input type="number" min="0" step="any" data-r="'+r+'" data-c="'+c2+'" aria-label="'+m+', Criteria'+(c2+1)+'" value="'+(v===null?"":v)+'"></td>'; }
+    h += '</tr>'; });
+  h += '</table></div>';
+  h += '<div class="row" style="margin-top:12px"><div><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
+  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents them from completing the Practice Goal.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for the stretch goals.</p><p class="note">A column made only of % Correct Responses or Avg Response Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
+  return h;
+}
+function bindGoal(){
+  var g = student().goals["Default Goal"];
+  Array.prototype.forEach.call(app.querySelectorAll("table.goal input"), function(inp){
+    inp.onchange = function(){
+      var r = +this.getAttribute("data-r"), c = +this.getAttribute("data-c"), old = g.cells[r][c];
+      var v = this.value === "" ? null : parseFloat(this.value);
+      if (v !== null && !(v >= 0)) { g.cells[r][c] = old; return showInstructor("goal","Thresholds must be 0 or more."); }
+      if (v !== null && r === 1 && v > 100) { return showInstructor("goal","% Correct Responses can't be above 100."); }
+      g.cells[r][c] = v;
+      if (!goalValid(g)) { g.cells[r][c] = old; return showInstructor("goal","The Goal needs at least one threshold."); }
+      save(); };
+  });
+  $("cap").onchange = function(){ var v = parseFloat(this.value); if (!(v > 0)) return showInstructor("goal","The Response Time Cap must be above 0."); g.cap = v; save(); };
+}
+function studentsHtml(){
+  var h = '<div class="panel"><h2>Students</h2><p class="note">Each Student keeps their own Practice history on this device. Topic and Goal settings are copied from a fresh default for each new Student.</p>';
+  h += '<div class="row"><div><label for="newname">New Student name</label><input type="text" id="newname" maxlength="30"></div><button class="primary" id="addstu">Add</button></div></div>';
+  return h;
+}
+function bindStudents(){
+  $("addstu").onclick = function(){
+    var n = $("newname").value.trim();
+    if (!n) return showInstructor("students","Enter a name.");
+    if (db.students[n]) return showInstructor("students","That name is already used.");
+    db.students[n] = makeStudent(n); instrSel = n; save(); showInstructor("students"); };
+}
+
+showHome();
+if("serviceWorker" in navigator){try{navigator.serviceWorker.register("sw.js")}catch(e){}}
+</script>
+</body></html>
