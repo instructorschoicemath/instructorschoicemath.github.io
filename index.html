@@ -76,6 +76,7 @@ table.g tr.lbl th:first-child{text-align:right}
 table.goal th,table.goal td{padding:2px}
 table.goal th{text-align:left;font-size:.78rem;font-weight:600;line-height:1.2;vertical-align:bottom}
 table.goal th:first-child{width:5.5rem}
+table.goal tr+tr th{vertical-align:middle}
 table.goal th small{display:block;font-weight:400;color:var(--muted)}
 table.goal input{width:2.9rem;padding:6px 2px;text-align:center;font-size:.9rem}
 .capwrap{flex:0 0 7rem!important}
@@ -83,6 +84,12 @@ table.goal input{width:2.9rem;padding:6px 2px;text-align:center;font-size:.9rem}
 .res .stat{padding:8px 6px;text-align:center}
 .res .stat b{font-size:1.15rem}
 .res .stat span{font-size:.65rem;display:block;line-height:1.2}
+.chk{display:flex;gap:8px;align-items:center;font-size:1rem;color:var(--fg);margin-top:12px}
+.chk input{width:auto;min-width:0}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.btns button{flex:1 1 5rem;padding-inline:8px}
+.maintabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.maintabs button{padding:8px 4px;font-size:.85rem;line-height:1.15}
 .opw{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .opw .nm{display:none}
 @media (min-width:480px){.opw .nm{display:inline}.opw .sy{display:none}}
@@ -109,7 +116,7 @@ var OPS = ["Addition","Subtraction","Multiplication","Division"];
 var SYM = {Addition:"+",Subtraction:"−",Multiplication:"×",Division:"÷"};
 var METRICS = ["Correct Response Count","% Correct Responses","Correct Response Streak","Avg Response Time"];
 var KEY = "arithmeticPractice";
-var DATA_VERSION = 1;
+var DATA_VERSION = 2;
 var LOCKOUT_MS = 500;
 
 /* ============ storage layer (swap this out later for a bigger store) ============ */
@@ -131,7 +138,7 @@ function makeStudent(name){
   var grids = {}, sets = {}, topicOps = {};
   OPS.forEach(function(op){
     grids[op] = { Unity: makeGrid(1), Instructor: makeGrid(1) };
-    sets[op] = { Unity: { a: new Array(N).fill(1), b: new Array(N).fill(1) } };
+    sets[op] = { Unity: { a: new Array(N).fill(1), b: new Array(N).fill(1) }, Instructor: { a: new Array(N).fill(1), b: new Array(N).fill(1) } };
     topicOps[op] = { primary:1, secondary:1, auto:false, operandSet:"Unity", grid:"Unity" };
   });
   var cells = METRICS.map(function(){ return [null,null,null,null]; });
@@ -144,13 +151,24 @@ function makeStudent(name){
     grids: grids,
     goals: { "Default Goal": { cells: cells, cap: 20 } },
     lessonPlans: { "Default Lesson Plan": { topic:"Default Topic", goal:"Default Goal" } },
-    practices: []
+    practices: [],
+    hidden: false
   };
+}
+function makeStudentFrom(name, srcName){
+  var st = makeStudent(name), src = srcName ? db.students[srcName] : null;
+  if (src){ ['topics','goals','lessonPlans','grids','operandSets'].forEach(function(k){ st[k] = JSON.parse(JSON.stringify(src[k])); }); }
+  return st;
 }
 function migrate(d){
   if (!d || typeof d !== "object") return null;
   if (!d.version) d.version = 1;
-  // future: if (d.version < 2) { ...; d.version = 2; }
+  if (d.version < 2){   // version 2: an editable Instructor operand weights set for each Operation
+    Object.keys(d.students || {}).forEach(function(n){ var s = d.students[n];
+      OPS.forEach(function(op){ var o = s.operandSets[op]; if (!o.Instructor) o.Instructor = { a: new Array(N).fill(1), b: new Array(N).fill(1) }; });
+      if (s.hidden === undefined) s.hidden = false; });
+    d.version = 2;
+  }
   return d;
 }
 var db = migrate(Store.read());
@@ -161,7 +179,8 @@ if (!db || !db.students) {
 function save(){ Store.write(db); }
 var ctx = null;                      // Student whose data the current screen uses
 var homeSel = null, instrSel = null; // selections are not remembered between visits
-function defaultSel(){ var k = Object.keys(db.students); return k.length === 1 ? k[0] : null; }
+function visibleNames(){ return Object.keys(db.students).filter(function(n){ return !db.students[n].hidden; }); }
+function defaultSel(all){ var k = all ? Object.keys(db.students) : visibleNames(); return k.length === 1 ? k[0] : null; }
 homeSel = defaultSel();
 function student(){ return db.students[ctx]; }
 function menuHtml(label, id){
@@ -263,11 +282,19 @@ function $(id){ return document.getElementById(id); }
 
 /* ============ home ============ */
 function showHome(msg){
-  screen = "home"; P = null; ctx = homeSel;
+  screen = "home"; P = null;
+  if (homeSel && (!db.students[homeSel] || db.students[homeSel].hidden)) homeSel = defaultSel();
+  ctx = homeSel;
   var st = student();
-  var names = Object.keys(db.students);
+  var names = visibleNames();
   var lps = st ? Object.keys(st.lessonPlans) : [];
   var h = '<div class="top"><h1>Arithmetic Practice</h1>'+menuHtml("Instructor","instr")+'</div>';
+  if (!names.length){
+    h += '<div class="panel"><p>No Students are available. Add one in the Instructor menu.</p></div>';
+    app.innerHTML = h; bindMenu();
+    $("instr").onclick = function(){ instrSel = defaultSel(true); showInstructor("plan"); };
+    return;
+  }
   h += '<div class="panel"><div class="row"><div><label for="stu">Student</label><select id="stu">';
   if (!st) h += '<option value="">Select a Student\u2026</option>';
   names.forEach(function(n){ h += '<option'+(n===homeSel?' selected':'')+'>'+esc(n)+'</option>'; });
@@ -282,7 +309,7 @@ function showHome(msg){
   $("stu").onchange = function(){ homeSel = this.value || null; showHome(); };
   $("start").onclick = function(){ if (!homeSel) return showHome("Select a Student first."); startPractice($("lp").value); };
   bindMenu();
-  $("instr").onclick = function(){ instrSel = defaultSel(); showInstructor("topic"); };
+  $("instr").onclick = function(){ instrSel = defaultSel(true); showInstructor("plan"); };
 }
 
 /* ============ practice ============ */
@@ -290,6 +317,8 @@ function startPractice(lpName){
   ctx = homeSel; var st = student(), lp = st.lessonPlans[lpName];
   var goal = st.goals[lp.goal];
   if (!goalValid(goal)) return showHome("The Goal needs at least one threshold. Fix it in the Instructor menu.");
+  var tp = st.topics[lp.topic];
+  if (tp.autoOps){ OPS.forEach(function(op){ tp.ops[op].secondary = cellWeights(st, tp, op).total; }); save(); }
   var plan = buildPlan(st, lp);
   if (!plan.opW.some(function(w){return w>0;})) return showHome("No Operation can be asked. Give at least one Operation a Primary Weight above 0 and a grid with a weight above 0 (in Division, Operand A can't be 0).");
   P = { who:homeSel, lp:lpName, goal:goal, plan:plan, cap:goal.cap, correct:0, incorrect:0, streak:0, longest:0, timeSum:0,
@@ -397,46 +426,187 @@ document.addEventListener("keydown", function(e){
 document.addEventListener("click", function(e){ if (screen === "feedback"){ advance(); } });
 
 /* ============ instructor ============ */
-var instrTab = "topic", instrOp = "Addition";
+var instrTab = "plan", instrOp = "Addition", instrTopic = null, instrGoal = null, instrPlan = null, mgr = null;
+var SAVENOTE = '<p class="note">Changes save automatically. Save As makes a copy of the current settings under a new name.</p>';
+var LBL = ["Correct Count","% Correct","Correct Streak","Avg Time"];
+function keysOf(o){ return Object.keys(o); }
+function pickName(cur, list){ return list.indexOf(cur) >= 0 ? cur : list[0]; }
+function clone(x){ return JSON.parse(JSON.stringify(x)); }
+function renameKey(o, a, b){ var r = {}; Object.keys(o).forEach(function(k){ r[k === a ? b : k] = o[k]; }); return r; }
+function nameError(n, list, except){
+  if (!n) return "Enter a name.";
+  if (n.length > 30) return "Use 30 characters or fewer.";
+  if (list.indexOf(n) >= 0 && n !== except) return "That name is already used.";
+  return null;
+}
+function optHtml(list, cur){ return list.map(function(n){ return '<option'+(n===cur?' selected':'')+'>'+esc(n)+'</option>'; }).join(""); }
+
+/* A select plus New copy / Rename / Delete, with the name entry and delete confirmation shown inline (no browser dialogs). */
+function mgrHtml(kind, list, cur, o){
+  o = o || {};
+  var h = '';
+  if (o.label) h += '<div class="row"><div><label for="sel-'+kind+'">'+o.label+'</label><select id="sel-'+kind+'">'+optHtml(list,cur)+'</select></div></div>';
+  h += '<div class="btns">'+(o.noNew ? '' : '<button data-mgr="new" data-kind="'+kind+'">Save As</button>')+
+       '<button data-mgr="rename" data-kind="'+kind+'"'+(o.locked?' disabled':'')+'>Rename</button>'+
+       '<button data-mgr="delete" data-kind="'+kind+'"'+(o.locked?' disabled':'')+'>Delete</button></div>';
+  if (mgr && mgr.kind === kind){
+    if (mgr.mode === "delete") h += '<p class="err">Delete '+esc(o.noun || ('"'+cur+'"'))+'? This cannot be undone.</p><div class="btns"><button class="primary" id="mgr-ok">Delete</button><button id="mgr-cancel">Cancel</button></div>';
+    else h += '<div class="row"><div><label for="mgr-name">'+(mgr.mode==="new"?"Name for the new copy":"New name")+'</label><input type="text" id="mgr-name" maxlength="30" value="'+esc(mgr.draft !== undefined ? mgr.draft : (mgr.mode==="rename" ? cur : ""))+'"></div></div><div class="btns"><button class="primary" id="mgr-ok">Save</button><button id="mgr-cancel">Cancel</button></div>';
+  }
+  return h;
+}
+function bindMgr(){
+  Array.prototype.forEach.call(app.querySelectorAll("[data-mgr]"), function(b){
+    b.onclick = function(){ mgr = { kind:b.getAttribute("data-kind"), mode:b.getAttribute("data-mgr") }; showInstructor(); };
+  });
+  if ($("mgr-cancel")) $("mgr-cancel").onclick = function(){ mgr = null; showInstructor(); };
+  if ($("mgr-ok")) $("mgr-ok").onclick = function(){
+    var nm = $("mgr-name") ? $("mgr-name").value.trim() : null;
+    mgr.draft = nm;
+    var err = mgrAct(mgr.kind, mgr.mode, nm);
+    if (err) return showInstructor(null, err);
+    save(); mgr = null; showInstructor();
+  };
+}
+function mgrAct(kind, mode, nm){
+  var st = student(), op = instrOp, k, list, e, cur;
+  if (kind === "topic" || kind === "goal" || kind === "plan"){
+    var coll = kind === "topic" ? "topics" : kind === "goal" ? "goals" : "lessonPlans";
+    cur = kind === "topic" ? instrTopic : kind === "goal" ? instrGoal : instrPlan;
+    list = keysOf(st[coll]);
+    if (mode === "delete"){
+      if (list.length < 2) return "Keep at least one "+(kind==="plan"?"Lesson Plan":kind==="topic"?"Topic":"Goal")+".";
+      if (kind !== "plan"){
+        var field = kind === "topic" ? "topic" : "goal";
+        var users = keysOf(st.lessonPlans).filter(function(p){ return st.lessonPlans[p][field] === cur; });
+        if (users.length) return 'Lesson Plan "'+users[0]+'" uses this '+(kind==="topic"?"Topic":"Goal")+'. Change that Lesson Plan first.';
+      }
+      delete st[coll][cur]; if (kind==="topic") instrTopic = null; else if (kind==="goal") instrGoal = null; else instrPlan = null;
+      return null;
+    }
+    e = nameError(nm, list, mode === "rename" ? cur : null); if (e) return e;
+    if (mode === "new"){ st[coll][nm] = clone(st[coll][cur]); }
+    else if (nm !== cur){
+      st[coll] = renameKey(st[coll], cur, nm);
+      if (kind !== "plan"){ var f2 = kind === "topic" ? "topic" : "goal";
+        keysOf(st.lessonPlans).forEach(function(p){ if (st.lessonPlans[p][f2] === cur) st.lessonPlans[p][f2] = nm; }); }
+    }
+    if (kind==="topic") instrTopic = nm; else if (kind==="goal") instrGoal = nm; else instrPlan = nm;
+    return null;
+  }
+  if (kind === "grid"){
+    var topic = st.topics[instrTopic]; cur = topic.ops[op].grid; list = keysOf(st.grids[op]);
+    if (mode === "delete"){
+      if (cur === "Unity") return "The Unity grid can't be deleted.";
+      for (k in st.topics){ if (k !== instrTopic && st.topics[k].ops[op].grid === cur) return 'Topic "'+k+'" also uses this grid. Pick a different grid there first.'; }
+      delete st.grids[op][cur]; topic.ops[op].grid = "Unity"; return null;
+    }
+    e = nameError(nm, list, mode === "rename" ? cur : null); if (e) return e;
+    if (mode === "new"){ st.grids[op][nm] = clone(st.grids[op][cur]); topic.ops[op].grid = nm; }
+    else if (nm !== cur){
+      st.grids[op] = renameKey(st.grids[op], cur, nm);
+      for (k in st.topics){ if (st.topics[k].ops[op].grid === cur) st.topics[k].ops[op].grid = nm; }
+    }
+    return null;
+  }
+  if (kind === "opset"){
+    var tp = st.topics[instrTopic]; cur = tp.ops[op].operandSet; list = keysOf(st.operandSets[op]);
+    if (mode === "delete"){
+      if (cur === "Unity") return "The Unity set can't be deleted.";
+      for (k in st.topics){ if (k !== instrTopic && st.topics[k].ops[op].operandSet === cur) return 'Topic "'+k+'" also uses this set. Pick a different set there first.'; }
+      delete st.operandSets[op][cur]; tp.ops[op].operandSet = "Unity"; return null;
+    }
+    e = nameError(nm, list, mode === "rename" ? cur : null); if (e) return e;
+    if (mode === "new"){ st.operandSets[op][nm] = clone(st.operandSets[op][cur]); tp.ops[op].operandSet = nm; }
+    else if (nm !== cur){
+      st.operandSets[op] = renameKey(st.operandSets[op], cur, nm);
+      for (k in st.topics){ if (st.topics[k].ops[op].operandSet === cur) st.topics[k].ops[op].operandSet = nm; }
+    }
+    return null;
+  }
+  if (kind === "student"){
+    cur = instrSel; list = keysOf(db.students);
+    if (mode === "delete"){
+      if (list.length < 2) return "Keep at least one Student.";
+      delete db.students[cur]; instrSel = defaultSel(true); if (homeSel === cur) homeSel = defaultSel(); return null;
+    }
+    e = nameError(nm, list, cur); if (e) return e;
+    if (nm !== cur){
+      db.students = renameKey(db.students, cur, nm); db.students[nm].name = nm;
+      if (homeSel === cur) homeSel = nm; instrSel = nm;
+    }
+    return null;
+  }
+  return null;
+}
+
 function showInstructor(tab, msg){
-  screen = "instructor"; instrTab = tab || instrTab; ctx = instrSel;
+  screen = "instructor";
+  if (tab && tab !== instrTab){ mgr = null; }
+  instrTab = tab || instrTab; ctx = instrSel;
+  var st = student();
+  if (st){
+    instrTopic = pickName(instrTopic, keysOf(st.topics));
+    instrGoal = pickName(instrGoal, keysOf(st.goals));
+    instrPlan = pickName(instrPlan, keysOf(st.lessonPlans));
+  }
   var h = '<div class="top"><h1>Instructor</h1>'+menuHtml("Student page","tohome")+'</div>';
   h += '<div class="row" style="margin-bottom:10px"><div><label for="istu">Student</label><select id="istu">';
-  if (!instrSel) h += '<option value="">Select a Student\u2026</option>';
-  Object.keys(db.students).forEach(function(n){ h += '<option'+(n===instrSel?' selected':'')+'>'+esc(n)+'</option>'; });
-  h += '</select></div></div>';
-  h += '<div class="tabs">';
-  [["topic","Topic"],["goal","Goal"],["students","Students"]].forEach(function(t){
+  if (!instrSel) h += '<option value="">Select a Student…</option>';
+  h += keysOf(db.students).map(function(n){ return '<option value="'+esc(n)+'"'+(n===instrSel?' selected':'')+'>'+esc(n)+(db.students[n].hidden?' (hidden)':'')+'</option>'; }).join('') + '</select></div></div>';
+  h += '<div class="tabs maintabs">';
+  [["plan","Lesson Plan"],["topic","Topic"],["goal","Goal"],["students","Students"]].forEach(function(t){
     h += '<button data-tab="'+t[0]+'" aria-pressed="'+(instrTab===t[0])+'">'+t[1]+'</button>'; });
   h += '</div>';
-  if (msg) h += '<p class="err" role="alert">'+msg+'</p>';
+  if (msg) h += '<p class="err" role="alert">'+esc(msg)+'</p>';
   var needs = !instrSel && instrTab !== "students";
-  if (needs) h += '<p class="note">Select a Student above to edit their '+instrTab+'.</p>';
-  else if (instrTab === "topic") h += topicHtml(); else if (instrTab === "goal") h += goalHtml(); else h += studentsHtml();
+  if (needs) h += '<p class="note">Select a Student above to edit their settings.</p>';
+  else if (instrTab === "topic") h += topicHtml(); else if (instrTab === "goal") h += goalHtml();
+  else if (instrTab === "plan") h += planHtml(); else h += studentsHtml();
   app.innerHTML = h;
   bindMenu();
   $("tohome").onclick = function(){ homeSel = defaultSel(); showHome(); };
-  $("istu").onchange = function(){ instrSel = this.value || null; showInstructor(); };
+  $("istu").onchange = function(){ instrSel = this.value || null; mgr = null; showInstructor(); };
   Array.prototype.forEach.call(app.querySelectorAll("[data-tab]"), function(b){ b.onclick = function(){ showInstructor(b.getAttribute("data-tab")); }; });
   if (needs) return;
-  if (instrTab === "topic") bindTopic(); else if (instrTab === "goal") bindGoal(); else bindStudents();
+  bindMgr();
+  if (instrTab === "topic") bindTopic(); else if (instrTab === "goal") bindGoal(); else if (instrTab === "plan") bindPlan(); else bindStudents();
 }
+function fmtW(v){ return String(Math.round(v*10000)/10000); }
 function topicHtml(){
-  var st = student(), topic = st.topics["Default Topic"], t = topic.ops[instrOp];
-  var h = '<div class="panel"><h2>Default Topic</h2><p class="note">Primary Weight sets how often each Operation is asked. The grid sets how often each Operand A and Operand B pair is asked. A weight of 0 means never.</p>';
+  var st = student(), topic = st.topics[instrTopic], t = topic.ops[instrOp], gname = t.grid, oname = t.operandSet;
+  if (topic.autoOps){ OPS.forEach(function(op){ topic.ops[op].secondary = cellWeights(st, topic, op).total; }); save(); }
+  var h = '<div class="panel"><h2>Topic</h2><p class="note">A Topic is what gets practiced: how often each Operation is asked, and which grid sets how often each Operand A and Operand B pair is asked. A weight of 0 means never.</p>';
+  h += mgrHtml("topic", keysOf(st.topics), instrTopic, {label:"Topic"}) + SAVENOTE;
   h += '<h2 style="font-size:.95rem;margin-top:12px">Operation Weight (Primary)</h2><div class="opw">';
   OPS.forEach(function(op){
     h += '<div><label for="pw-'+op+'" aria-label="'+op+' Primary Weight"><span class="nm">'+op+'</span><span class="sy">'+SYM[op]+'</span></label><input type="number" min="0" step="any" id="pw-'+op+'" value="'+topic.ops[op].primary+'"></div>'; });
+  h += '</div>';
+  h += '<label class="chk" for="autoop"><input type="checkbox" id="autoop"'+(topic.autoOps?' checked':'')+'> Auto operation weighting</label>';
+  h += '<p class="note">When ticked, each Operation\u2019s Secondary Weight is set to the total weight of its grid cells, so an Operation with more to practice is asked more often. It is recalculated at the start of every Practice. An Operation\u2019s chance of being asked is its Primary Weight \u00d7 Secondary Weight, compared with the others.</p>';
+  h += '<h2 style="font-size:.95rem;margin-top:12px">Operation Weight (Secondary)</h2><div class="opw">';
+  OPS.forEach(function(op){
+    h += '<div><label for="sw-'+op+'" aria-label="'+op+' Secondary Weight"><span class="nm">'+op+'</span><span class="sy">'+SYM[op]+'</span></label><input type="number" min="0" step="any" id="sw-'+op+'" value="'+fmtW(topic.ops[op].secondary)+'"'+(topic.autoOps?' disabled':'')+'></div>'; });
   h += '</div></div>';
+  var editable = gname !== "Unity";
+  var others = keysOf(st.topics).filter(function(k){ return k !== instrTopic && st.topics[k].ops[instrOp].grid === gname; });
   h += '<div class="panel"><h2>Permutation grid</h2><div class="tabs optabs">';
   OPS.forEach(function(op){ h += '<button data-op="'+op+'" aria-pressed="'+(instrOp===op)+'">'+op+'</button>'; });
-  h += '</div><div class="row"><div><label for="gsel">Grid used for '+instrOp+'</label><select id="gsel"><option'+(t.grid==="Unity"?" selected":"")+'>Unity</option><option'+(t.grid==="Instructor"?" selected":"")+'>Instructor</option></select></div></div>';
-  var editable = t.grid === "Instructor";
-  var grid = st.grids[instrOp].Instructor;
-  h += '<p class="note">'+(editable ? 'Columns are Operand A, rows are Operand B. Edit the Instructor grid below.' : 'Unity gives every pair the same weight (1). Choose Instructor to edit weights.')+(instrOp==="Division"?' In Division, Operand A = 0 is never asked.':'')+'</p>';
-  h += '<div class="gridwrap"><table class="g"><tr class="lbl"><th>B \\ A</th>';
+  h += '</div>' + mgrHtml("grid", keysOf(st.grids[instrOp]), gname, {label:'Grid used for '+instrOp+' in this Topic', locked:!editable, noun:'the grid "'+gname+'"'});
+  var oedit = oname !== "Unity", oset = st.operandSets[instrOp][oname];
+  h += '<h2 style="font-size:.95rem;margin-top:14px">Operand weights for '+instrOp+'</h2>' + mgrHtml("opset", keysOf(st.operandSets[instrOp]), oname, {label:'Operand weights set used in this Topic', locked:!oedit, noun:'the operand weights set "'+oname+'"'});
+  h += '<div class="gridwrap"><table class="g ow"><tr class="lbl"><th></th>';
+  for (var q=0;q<N;q++) h += '<th>'+q+'</th>'; h += '</tr>';
+  ['a','b'].forEach(function(side){ h += '<tr><th>'+side.toUpperCase()+'</th>';
+    for (var q2=0;q2<N;q2++){ var odis = !oedit || (instrOp==="Division" && side==="a" && q2===0);
+      h += '<td><input type="number" min="0" step="any" data-side="'+side+'" data-i="'+q2+'" aria-label="Operand '+side.toUpperCase()+' weight for '+q2+'" value="'+oset[side][q2]+'"'+(odis?' disabled':'')+'></td>'; }
+    h += '</tr>'; });
+  h += '</table></div><p class="note">Each pair\u2019s weight is its grid weight \u00d7 the Operand A weight \u00d7 the Operand B weight.</p>';
+  h += '<h2 style="font-size:.95rem;margin-top:14px">Grid weights for '+instrOp+'</h2>';
+  h += '<p class="note">'+(editable ? 'Columns are Operand A, rows are Operand B.' : 'Unity gives every pair the same weight (1). Choose another grid, or use Save As, to edit weights.')+(instrOp==="Division"?' In Division, Operand A = 0 is never asked.':'')+(others.length && editable ? ' Editing this grid also changes it in: '+esc(others.join(", "))+'.' : '')+'</p>';
+  h += '<div class="gridwrap"><table class="g gt"><tr class="lbl"><th>B \\ A</th>';
   for (var a=0;a<N;a++) h += '<th>'+a+'</th>'; h += '</tr>';
-  var show = editable ? grid : st.grids[instrOp].Unity;
+  var show = st.grids[instrOp][gname];
   for (var b=0;b<N;b++){ h += '<tr><th>'+b+'</th>';
     for (var a2=0;a2<N;a2++){
       var dis = !editable || (instrOp==="Division" && a2===0);
@@ -450,61 +620,97 @@ function topicHtml(){
   return h;
 }
 function bindTopic(){
-  var st = student(), topic = st.topics["Default Topic"];
+  var st = student(), topic = st.topics[instrTopic], gname = topic.ops[instrOp].grid, oname = topic.ops[instrOp].operandSet;
+  function refreshSecondary(){ if (topic.autoOps){ OPS.forEach(function(op){ var v = cellWeights(st, topic, op).total; topic.ops[op].secondary = v; $("sw-"+op).value = fmtW(v); }); save(); } }
+  $("autoop").onchange = function(){ topic.autoOps = this.checked; if (this.checked) OPS.forEach(function(op){ topic.ops[op].secondary = cellWeights(st, topic, op).total; }); save(); showInstructor("topic"); };
+  OPS.forEach(function(op){ $("sw-"+op).onchange = function(){ var v = parseFloat(this.value); if (!(v >= 0)) return showInstructor("topic","Weights must be 0 or more."); topic.ops[op].secondary = v; save(); }; });
+  $("sel-opset").onchange = function(){ topic.ops[instrOp].operandSet = this.value; save(); mgr = null; showInstructor(); };
+  Array.prototype.forEach.call(app.querySelectorAll("table.ow input"), function(inp){
+    inp.onchange = function(){ var v = parseFloat(this.value); if (!(v >= 0)) return showInstructor("topic","Weights must be 0 or more.");
+      st.operandSets[instrOp][oname][this.getAttribute("data-side")][+this.getAttribute("data-i")] = v; save(); refreshSecondary(); };
+  });
+  $("sel-topic").onchange = function(){ instrTopic = this.value; mgr = null; showInstructor(); };
+  $("sel-grid").onchange = function(){ topic.ops[instrOp].grid = this.value; save(); mgr = null; showInstructor(); };
   OPS.forEach(function(op){ $("pw-"+op).onchange = function(){
     var v = parseFloat(this.value); if (!(v >= 0)){ return showInstructor("topic","Weights must be 0 or more."); }
     topic.ops[op].primary = v; save(); }; });
-  Array.prototype.forEach.call(app.querySelectorAll("[data-op]"), function(b){ b.onclick = function(){ instrOp = b.getAttribute("data-op"); showInstructor("topic"); }; });
-  $("gsel").onchange = function(){ topic.ops[instrOp].grid = this.value; save(); showInstructor("topic"); };
-  Array.prototype.forEach.call(app.querySelectorAll("table.g input"), function(inp){
+  Array.prototype.forEach.call(app.querySelectorAll("[data-op]"), function(b){ b.onclick = function(){ instrOp = b.getAttribute("data-op"); mgr = null; showInstructor("topic"); }; });
+  Array.prototype.forEach.call(app.querySelectorAll("table.gt input"), function(inp){
     inp.onchange = function(){
       var v = parseFloat(this.value);
       if (!(v >= 0)){ return showInstructor("topic","Weights must be 0 or more."); }
-      st.grids[instrOp].Instructor[+this.getAttribute("data-a")][+this.getAttribute("data-b")] = v; save(); };
+      st.grids[instrOp][gname][+this.getAttribute("data-a")][+this.getAttribute("data-b")] = v; save(); refreshSecondary(); };
   });
   if ($("applyall")) $("applyall").onclick = function(){
     var v = parseFloat($("setall").value); if (!(v >= 0)) return showInstructor("topic","Weights must be 0 or more.");
-    st.grids[instrOp].Instructor = makeGrid(v); save(); showInstructor("topic"); };
+    st.grids[instrOp][gname] = makeGrid(v); save(); refreshSecondary(); showInstructor("topic"); };
 }
 function goalHtml(){
-  var g = student().goals["Default Goal"];
-  var h = '<div class="panel"><h2>Default Goal</h2><p class="note">A Practice ends when any column is fully met. All filled cells in a column must be met. Leave a cell blank to skip it. Count, % and Streak are met at or above the number. Avg Response Time is met at or below it (seconds).</p>';
-  h += '<div class="gridwrap"><table class="goal"><tr><th></th>';
+  var st = student(), g = st.goals[instrGoal];
+  var h = '<div class="panel"><h2>Goal</h2>' + mgrHtml("goal", keysOf(st.goals), instrGoal, {label:"Goal"}) + SAVENOTE;
+  h += '<p class="note">A Practice ends when any column is fully met. All filled cells in a column must be met. Leave a cell blank to skip it. Count, % and Streak are met at or above the number. Avg Time is met at or below it (seconds).</p>';
+  h += '<div class="gridwrap"><table class="goal"><tr><th>Response Metric</th>';
   for (var c=0;c<4;c++) h += '<th>Criteria'+(c+1)+'<small>'+(c===0?'(fallback)':'(stretch)')+'</small></th>'; h += '</tr>';
-  METRICS.forEach(function(m,r){ h += '<tr><th>'+m+'</th>';
+  METRICS.forEach(function(m,r){ h += '<tr><th>'+LBL[r]+'</th>';
     for (var c2=0;c2<4;c2++){ var v = g.cells[r][c2];
       h += '<td><input type="number" min="0" step="any" data-r="'+r+'" data-c="'+c2+'" aria-label="'+m+', Criteria'+(c2+1)+'" value="'+(v===null?"":v)+'"></td>'; }
     h += '</tr>'; });
   h += '</table></div>';
   h += '<div class="row" style="margin-top:12px"><div class="capwrap"><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
-  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents completion of the Practice.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for stretch goals.</p><p class="note">A column made only of % Correct Responses or Avg Response Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
+  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents completion of the Practice.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for stretch goals.</p><p class="note">A column made only of % Correct or Avg Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
   return h;
 }
 function bindGoal(){
-  var g = student().goals["Default Goal"];
+  var g = student().goals[instrGoal];
+  $("sel-goal").onchange = function(){ instrGoal = this.value; mgr = null; showInstructor(); };
   Array.prototype.forEach.call(app.querySelectorAll("table.goal input"), function(inp){
     inp.onchange = function(){
       var r = +this.getAttribute("data-r"), c = +this.getAttribute("data-c"), old = g.cells[r][c];
       var v = this.value === "" ? null : parseFloat(this.value);
       if (v !== null && !(v >= 0)) { g.cells[r][c] = old; return showInstructor("goal","Thresholds must be 0 or more."); }
-      if (v !== null && r === 1 && v > 100) { return showInstructor("goal","% Correct Responses can't be above 100."); }
+      if (v !== null && r === 1 && v > 100) { return showInstructor("goal","% Correct can't be above 100."); }
       g.cells[r][c] = v;
       if (!goalValid(g)) { g.cells[r][c] = old; return showInstructor("goal","The Goal needs at least one threshold."); }
       save(); };
   });
   $("cap").onchange = function(){ var v = parseFloat(this.value); if (!(v > 0)) return showInstructor("goal","The Response Time Cap must be above 0."); g.cap = v; save(); };
 }
+function planHtml(){
+  var st = student(), lp = st.lessonPlans[instrPlan];
+  var h = '<div class="panel"><h2>Lesson Plan</h2><p class="note">A Lesson Plan pairs one Topic with one Goal. Students choose a Lesson Plan on the Student page.</p>';
+  h += mgrHtml("plan", keysOf(st.lessonPlans), instrPlan, {label:"Lesson Plan"}) + SAVENOTE;
+  h += '<div class="row"><div><label for="lp-topic">Topic</label><select id="lp-topic">'+optHtml(keysOf(st.topics), lp.topic)+'</select></div>'+
+       '<div><label for="lp-goal">Goal</label><select id="lp-goal">'+optHtml(keysOf(st.goals), lp.goal)+'</select></div></div></div>';
+  return h;
+}
+function bindPlan(){
+  var st = student(), lp = st.lessonPlans[instrPlan];
+  $("sel-plan").onchange = function(){ instrPlan = this.value; mgr = null; showInstructor(); };
+  $("lp-topic").onchange = function(){ lp.topic = this.value; save(); };
+  $("lp-goal").onchange = function(){ lp.goal = this.value; save(); };
+}
 function studentsHtml(){
-  var h = '<div class="panel"><h2>Students</h2><p class="note">Each Student keeps their own Practice history on this device. Topic and Goal settings are copied from a fresh default for each new Student.</p>';
-  h += '<div class="row"><div><label for="newname">New Student name</label><input type="text" id="newname" maxlength="30"></div><button class="primary" id="addstu">Add</button></div></div>';
+  var h = '<div class="panel"><h2>Students</h2><p class="note">Each Student keeps their own settings and Practice history on this device.</p>';
+  if (instrSel){
+    var cs = db.students[instrSel];
+    h += '<p><b>'+esc(instrSel)+'</b></p>' + mgrHtml("student", [], instrSel, {noNew:true, noun:'"'+instrSel+'" and all of their Practice history'});
+    h += '<label class="chk" for="hidestu"><input type="checkbox" id="hidestu"'+(cs.hidden?' checked':'')+'> Hide from the Student page (e.g. for a template)</label>';
+  }
+  h += '<h2 style="font-size:.95rem;margin-top:16px">Add a Student</h2><div class="row"><div><label for="newname">New Student name</label><input type="text" id="newname" maxlength="30"></div></div>';
+  h += '<div class="row" style="margin-top:8px"><div><label for="copyfrom">Copy settings from</label><select id="copyfrom"><option value="">None (defaults)</option>'+
+       keysOf(db.students).map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('')+'</select></div><button class="primary" id="addstu">Add</button></div>';
+  h += '<p class="note">Copying brings over Topics, Goals, grids and Lesson Plans, not Practice history.</p></div>';
   return h;
 }
 function bindStudents(){
+  if ($("hidestu")) $("hidestu").onchange = function(){
+    db.students[instrSel].hidden = this.checked;
+    if (this.checked && homeSel === instrSel) homeSel = defaultSel();
+    save(); };
   $("addstu").onclick = function(){
     var n = $("newname").value.trim();
-    if (!n) return showInstructor("students","Enter a name.");
-    if (db.students[n]) return showInstructor("students","That name is already used.");
-    db.students[n] = makeStudent(n); instrSel = n; save(); showInstructor("students"); };
+    var e = nameError(n, keysOf(db.students), null); if (e) return showInstructor("students", e);
+    db.students[n] = makeStudentFrom(n, $("copyfrom").value || null); instrSel = n; mgr = null; save(); showInstructor("students"); };
 }
 
 showHome();
