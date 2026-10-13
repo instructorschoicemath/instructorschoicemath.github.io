@@ -52,10 +52,11 @@ button.link{background:none;border:none;color:var(--accent);text-decoration:unde
 .stat{background:var(--bg);border-radius:8px;padding:8px 10px}
 .stat b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums}
 .stat span{font-size:.75rem;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
-.q{font-size:clamp(2.2rem,11vw,3.4rem);text-align:center;font-weight:700;font-variant-numeric:tabular-nums;padding:20px 0 8px;letter-spacing:.02em}
-.ans{min-height:3.6rem;text-align:center;font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;border-bottom:3px solid var(--accent);margin:0 auto 14px;max-width:12rem}
+.q{font-size:clamp(2rem,10vw,3.2rem);text-align:center;font-weight:700;font-variant-numeric:tabular-nums;padding:10px 0 12px;letter-spacing:.02em;white-space:nowrap}
+.ans{color:var(--accent)}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.pad button{min-height:56px;font-size:1.5rem;font-weight:600}
+.pad button{min-height:52px;font-size:1.5rem;font-weight:600}
+@media (max-height:720px){.pad{gap:6px}.pad button{min-height:46px;font-size:1.35rem}.stats .stat{padding:5px 8px}.stats .stat b{font-size:1.05rem}body{padding-block:8px 16px}.panel{padding:12px;margin-block:8px}}
 .pad .wide{grid-column:1/-1;font-size:1.2rem}
 .flash{position:fixed;inset:0;pointer-events:none;background:var(--good-soft);opacity:0}
 .flash.on{opacity:var(--flash-opacity)}
@@ -70,9 +71,12 @@ table.g td{padding:1px}
 table.g input{width:2.5rem;padding:4px 2px;text-align:center;font-size:.85rem}
 table.g input:disabled{opacity:.35}
 table.g tr.lbl th:first-child{text-align:right}
-table.goal th,table.goal td{padding:4px}
-table.goal th{text-align:left;font-size:.85rem;font-weight:600;white-space:nowrap}
-table.goal input{width:4.2rem;text-align:center}
+table.goal th,table.goal td{padding:2px}
+table.goal th{text-align:left;font-size:.78rem;font-weight:600;line-height:1.2;vertical-align:bottom}
+table.goal th:first-child{width:5.5rem}
+table.goal th small{display:block;font-weight:400;color:var(--muted)}
+table.goal input{width:2.9rem;padding:6px 2px;text-align:center;font-size:.9rem}
+.capwrap{flex:0 0 7rem!important}
 .res{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .res .stat{padding:8px 6px;text-align:center}
 .res .stat b{font-size:1.15rem}
@@ -129,8 +133,8 @@ function makeStudent(name){
     topicOps[op] = { primary:1, secondary:1, auto:false, operandSet:"Unity", grid:"Unity" };
   });
   var cells = METRICS.map(function(){ return [null,null,null,null]; });
-  cells[0][0] = 20; cells[1][0] = 90;   // stretch goal
-  cells[0][3] = 40; cells[1][3] = 60;   // Fallback goal
+  cells[0][0] = 40; cells[1][0] = 60;   // Fallback goal (Criteria1)
+  cells[0][3] = 20; cells[1][3] = 90;   // stretch goal (Criteria4)
   return {
     name: name,
     topics: { "Default Topic": { ops: topicOps } },
@@ -303,7 +307,7 @@ function statsHtml(){
 }
 function renderQuestion(){
   var h = '<div class="top"><button class="link" id="quit">Quit</button><span class="note">'+esc(P.lp)+'</span></div>';
-  h += '<div class="panel">'+statsHtml()+'<div class="q" aria-live="polite">'+esc(P.q.text)+' = ?</div><div class="ans" id="ans">'+esc(P.input)+'</div>';
+  h += '<div class="panel">'+statsHtml()+'<div class="q" aria-live="polite">'+esc(P.q.text)+' = <span class="ans" id="ans">'+(P.input===""?"?":esc(P.input))+'</span></div>';
   h += '<div class="pad">';
   [7,8,9,4,5,6,1,2,3].forEach(function(d){ h += '<button data-k="'+d+'" aria-label="'+d+'">'+d+'</button>'; });
   h += '<button data-k="back" aria-label="Backspace">⌫</button><button data-k="0" aria-label="0">0</button><span></span>';
@@ -326,7 +330,7 @@ function press(k){
   if (k === "submit") return submit();
   if (k === "back") P.input = P.input.slice(0,-1);
   else if (P.input.length < 4) P.input += k;
-  var a = $("ans"); if (a) a.textContent = P.input;
+  var a = $("ans"); if (a) a.textContent = P.input === "" ? "?" : P.input;
 }
 function submit(){
   if (P.input === "") return;
@@ -464,13 +468,13 @@ function goalHtml(){
   var g = student().goals["Default Goal"];
   var h = '<div class="panel"><h2>Default Goal</h2><p class="note">A Practice ends when any column is fully met. All filled cells in a column must be met. Leave a cell blank to skip it. Count, % and Streak are met at or above the number. Avg Response Time is met at or below it (seconds).</p>';
   h += '<div class="gridwrap"><table class="goal"><tr><th></th>';
-  for (var c=0;c<4;c++) h += '<th>Criteria'+(c+1)+'</th>'; h += '</tr>';
+  for (var c=0;c<4;c++) h += '<th>Criteria'+(c+1)+'<small>'+(c===0?'(fallback)':'(stretch)')+'</small></th>'; h += '</tr>';
   METRICS.forEach(function(m,r){ h += '<tr><th>'+m+'</th>';
     for (var c2=0;c2<4;c2++){ var v = g.cells[r][c2];
       h += '<td><input type="number" min="0" step="any" data-r="'+r+'" data-c="'+c2+'" aria-label="'+m+', Criteria'+(c2+1)+'" value="'+(v===null?"":v)+'"></td>'; }
     h += '</tr>'; });
   h += '</table></div>';
-  h += '<div class="row" style="margin-top:12px"><div><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
+  h += '<div class="row" style="margin-top:12px"><div class="capwrap"><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
   h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents them from completing the Practice Goal.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for the stretch goals.</p><p class="note">A column made only of % Correct Responses or Avg Response Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
   return h;
 }
