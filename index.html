@@ -63,6 +63,8 @@ button.link{background:none;border:none;color:var(--accent);text-decoration:unde
 .wrong{background:var(--bad-soft);border:1px solid var(--bad);border-radius:12px;padding:16px;text-align:center}
 .wrong .big{font-size:2rem;font-weight:700}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.optabs{display:grid;grid-template-columns:repeat(2,1fr)}
+@media (min-width:480px){.optabs{grid-template-columns:repeat(4,1fr)}}
 .tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .gridwrap{overflow-x:auto;max-width:100%}
 table.g{border-collapse:collapse;font-size:.8rem}
@@ -426,7 +428,7 @@ function topicHtml(){
   OPS.forEach(function(op){
     h += '<div><label for="pw-'+op+'" aria-label="'+op+' Primary Weight"><span class="nm">'+op+'</span><span class="sy">'+SYM[op]+'</span></label><input type="number" min="0" step="any" id="pw-'+op+'" value="'+topic.ops[op].primary+'"></div>'; });
   h += '</div></div>';
-  h += '<div class="panel"><h2>Permutation grid</h2><div class="tabs">';
+  h += '<div class="panel"><h2>Permutation grid</h2><div class="tabs optabs">';
   OPS.forEach(function(op){ h += '<button data-op="'+op+'" aria-pressed="'+(instrOp===op)+'">'+op+'</button>'; });
   h += '</div><div class="row"><div><label for="gsel">Grid used for '+instrOp+'</label><select id="gsel"><option'+(t.grid==="Unity"?" selected":"")+'>Unity</option><option'+(t.grid==="Instructor"?" selected":"")+'>Instructor</option></select></div></div>';
   var editable = t.grid === "Instructor";
@@ -475,7 +477,7 @@ function goalHtml(){
     h += '</tr>'; });
   h += '</table></div>';
   h += '<div class="row" style="margin-top:12px"><div class="capwrap"><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
-  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents them from completing the Practice Goal.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for the stretch goals.</p><p class="note">A column made only of % Correct Responses or Avg Response Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
+  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents completion of the Practice.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for stretch goals.</p><p class="note">A column made only of % Correct Responses or Avg Response Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
   return h;
 }
 function bindGoal(){
