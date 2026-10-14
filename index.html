@@ -67,7 +67,12 @@ button.link{background:none;border:none;color:var(--accent);text-decoration:unde
 @media (min-width:480px){.optabs{grid-template-columns:repeat(4,1fr)}}
 .tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .gridwrap{overflow-x:auto;max-width:100%}
+.ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:4px}
+.endbtns button{font-size:1.1rem}
 table.g{border-collapse:collapse;font-size:.8rem}
+table.gt th:first-child,table.gt td:first-child{position:sticky;left:0;width:2.2rem;min-width:2.2rem;background:var(--panel);z-index:1}
+table.gt th:nth-child(2),table.gt td:nth-child(2){position:sticky;left:2.2rem;background:var(--panel);z-index:1}
+table.gt input.wt{background:var(--key);border-style:dashed}
 table.g th{color:var(--muted);font-weight:600;padding:2px 4px;text-align:center}
 table.g td{padding:1px}
 table.g input{width:2.5rem;padding:4px 2px;text-align:center;font-size:.85rem}
@@ -178,7 +183,7 @@ if (!db || !db.students) {
 }
 function save(){ Store.write(db); }
 var ctx = null;                      // Student whose data the current screen uses
-var homeSel = null, instrSel = null; // selections are not remembered between visits
+var homeSel = null, homeLp = null, instrSel = null; // selections are not remembered between visits
 function visibleNames(){ return Object.keys(db.students).filter(function(n){ return !db.students[n].hidden; }); }
 function defaultSel(all){ var k = all ? Object.keys(db.students) : visibleNames(); return k.length === 1 ? k[0] : null; }
 homeSel = defaultSel();
@@ -292,7 +297,7 @@ function showHome(msg){
   if (!names.length){
     h += '<div class="panel"><p>No Students are available. Add one in the Instructor menu.</p></div>';
     app.innerHTML = h; bindMenu();
-    $("instr").onclick = function(){ instrSel = defaultSel(true); showInstructor("plan"); };
+    $("instr").onclick = function(){ instrSel = defaultSel(true); showInstructor("topic"); };
     return;
   }
   h += '<div class="panel"><div class="row"><div><label for="stu">Student</label><select id="stu">';
@@ -300,7 +305,7 @@ function showHome(msg){
   names.forEach(function(n){ h += '<option'+(n===homeSel?' selected':'')+'>'+esc(n)+'</option>'; });
   h += '</select></div><div><label for="lp">Lesson Plan</label><select id="lp"'+(st?'':' disabled')+'>';
   if (!st) h += '<option>\u2013</option>';
-  lps.forEach(function(n){ h += '<option>'+esc(n)+'</option>'; });
+  lps.forEach(function(n){ h += '<option'+(n===homeLp?' selected':'')+'>'+esc(n)+'</option>'; });
   h += '</select></div></div>';
   if (msg) h += '<p class="err" role="alert">'+msg+'</p>';
   h += '<p><button class="primary" id="start" style="width:100%;font-size:1.2rem">Start Practice</button></p></div>';
@@ -309,7 +314,7 @@ function showHome(msg){
   $("stu").onchange = function(){ homeSel = this.value || null; showHome(); };
   $("start").onclick = function(){ if (!homeSel) return showHome("Select a Student first."); startPractice($("lp").value); };
   bindMenu();
-  $("instr").onclick = function(){ instrSel = defaultSel(true); showInstructor("plan"); };
+  $("instr").onclick = function(){ instrSel = defaultSel(true); showInstructor("topic"); };
 }
 
 /* ============ practice ============ */
@@ -403,15 +408,24 @@ function finish(){
   var h = '<h1>Practice complete</h1><p class="sub">'+esc(P.who)+' · '+esc(P.lp)+'</p><div class="panel"><div class="res">'+
    cell(fmtPct(rec.pctCorrect),'% Correct')+cell(rec.correct,'Correct')+cell(rec.incorrect,'Incorrect')+cell(rec.longestStreak,'Longest Streak')+
    cell(fmtTime(rec.avgTime),'Avg Response Time')+cell(fmtTime(fastest),'Fastest')+cell(fmtTime(slowest),'Slowest')+cell(fmtDur(rec.durationMs),'Total Time')+'</div></div>';
+  var ICON_HOME = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h5v-6h3v6h5V10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var ICON_REPEAT = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4.5h-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  h += '<div class="btns endbtns"><button id="done" aria-label="Home">'+ICON_HOME+' Home</button><button class="primary" id="repeat" aria-label="Repeat">'+ICON_REPEAT+' Repeat</button></div>';
   var recent = st.practices.slice(-5).reverse();
   h += '<div class="panel"><h2>Recent Practices</h2><div class="gridwrap"><table class="hist"><tr><th>When</th><th>Plan</th><th>Correct</th><th>%</th><th>Avg time</th></tr>';
   recent.forEach(function(r){
     h += '<tr><td>'+esc(new Date(r.when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))+'</td><td>'+esc(r.lessonPlan)+'</td><td>'+r.correct+'</td><td>'+fmtPct(r.pctCorrect)+'</td><td>'+fmtTime(r.avgTime)+'</td></tr>';
   });
   h += '</table></div></div>';
-  h += '<p><button class="primary" id="done" style="width:100%">Done</button></p>';
-  app.innerHTML = h; $("done").onclick = function(){ homeSel = defaultSel(); showHome(); };
+  var who = P.who, lpName = P.lp;
+  app.innerHTML = h;
+  $("done").onclick = function(){ homeSel = defaultSel(); homeLp = null; showHome(); };
+  $("repeat").onclick = function(){ homeSel = who; homeLp = lpName; showHome(); };
 }
+var selJust = null;
+document.addEventListener("focusin", function(e){ var t = e.target;
+  if (t && t.tagName === "INPUT" && t.type === "number"){ selJust = t; try { t.select(); } catch(x){} setTimeout(function(){ if (document.activeElement === t){ try { t.select(); } catch(x){} } }, 30); } });
+document.addEventListener("mouseup", function(e){ if (selJust && e.target === selJust){ e.preventDefault(); } selJust = null; }, true);
 document.addEventListener("keydown", function(e){
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (screen === "question"){
@@ -426,7 +440,7 @@ document.addEventListener("keydown", function(e){
 document.addEventListener("click", function(e){ if (screen === "feedback"){ advance(); } });
 
 /* ============ instructor ============ */
-var instrTab = "plan", instrOp = "Addition", instrTopic = null, instrGoal = null, instrPlan = null, mgr = null;
+var instrTab = "topic", instrOp = "Addition", instrTopic = null, instrGoal = null, instrPlan = null, mgr = null;
 var SAVENOTE = '<p class="note">Changes save automatically. Save As makes a copy of the current settings under a new name.</p>';
 var LBL = ["Correct Count","% Correct","Correct Streak","Avg Time"];
 function keysOf(o){ return Object.keys(o); }
@@ -555,7 +569,7 @@ function showInstructor(tab, msg){
   if (!instrSel) h += '<option value="">Select a Student…</option>';
   h += keysOf(db.students).map(function(n){ return '<option value="'+esc(n)+'"'+(n===instrSel?' selected':'')+'>'+esc(n)+(db.students[n].hidden?' (hidden)':'')+'</option>'; }).join('') + '</select></div></div>';
   h += '<div class="tabs maintabs">';
-  [["plan","Lesson Plan"],["topic","Topic"],["goal","Goal"],["students","Students"]].forEach(function(t){
+  [["topic","Topic"],["goal","Goal"],["plan","Lesson Plan"],["students","Students"]].forEach(function(t){
     h += '<button data-tab="'+t[0]+'" aria-pressed="'+(instrTab===t[0])+'">'+t[1]+'</button>'; });
   h += '</div>';
   if (msg) h += '<p class="err" role="alert">'+esc(msg)+'</p>';
@@ -578,43 +592,40 @@ function topicHtml(){
   if (topic.autoOps){ OPS.forEach(function(op){ topic.ops[op].secondary = cellWeights(st, topic, op).total; }); save(); }
   var h = '<div class="panel"><h2>Topic</h2><p class="note">A Topic is what gets practiced: how often each Operation is asked, and which grid sets how often each Operand A and Operand B pair is asked. A weight of 0 means never.</p>';
   h += mgrHtml("topic", keysOf(st.topics), instrTopic, {label:"Topic"}) + SAVENOTE;
-  h += '<h2 style="font-size:.95rem;margin-top:12px">Operation Weight (Primary)</h2><div class="opw">';
+  h += '<h2 style="font-size:.95rem;margin-top:12px">Operation Controls</h2>';
+  h += '<p class="note" style="margin-bottom:2px"><b>Primary</b> (typically 1/0 if using Auto-Set)</p><div class="opw">';
   OPS.forEach(function(op){
     h += '<div><label for="pw-'+op+'" aria-label="'+op+' Primary Weight"><span class="nm">'+op+'</span><span class="sy">'+SYM[op]+'</span></label><input type="number" min="0" step="any" id="pw-'+op+'" value="'+topic.ops[op].primary+'"></div>'; });
   h += '</div>';
-  h += '<label class="chk" for="autoop"><input type="checkbox" id="autoop"'+(topic.autoOps?' checked':'')+'> Auto operation weighting</label>';
-  h += '<p class="note">When ticked, each Operation\u2019s Secondary Weight is set to the total weight of its grid cells, so an Operation with more to practice is asked more often. It is recalculated at the start of every Practice. An Operation\u2019s chance of being asked is its Primary Weight \u00d7 Secondary Weight, compared with the others.</p>';
-  h += '<h2 style="font-size:.95rem;margin-top:12px">Operation Weight (Secondary)</h2><div class="opw">';
+  h += '<p class="note" style="margin:10px 0 2px"><b>Secondary</b> (typically 1s for no effect except w/ Auto-Set)</p><div class="opw">';
   OPS.forEach(function(op){
     h += '<div><label for="sw-'+op+'" aria-label="'+op+' Secondary Weight"><span class="nm">'+op+'</span><span class="sy">'+SYM[op]+'</span></label><input type="number" min="0" step="any" id="sw-'+op+'" value="'+fmtW(topic.ops[op].secondary)+'"'+(topic.autoOps?' disabled':'')+'></div>'; });
-  h += '</div></div>';
+  h += '</div>';
+  h += '<label class="chk" for="autoop"><input type="checkbox" id="autoop"'+(topic.autoOps?' checked':'')+'> Auto operation weighting</label>';
+  h += '<p class="note">When ticked, each Operation\u2019s Secondary Weight is set to the total weight of its grid cells, so an Operation with more to practice is asked more often. It is recalculated at the start of every Practice. An Operation\u2019s chance of being asked is its Primary Weight \u00d7 Secondary Weight, compared with the others.</p></div>';
   var editable = gname !== "Unity";
   var others = keysOf(st.topics).filter(function(k){ return k !== instrTopic && st.topics[k].ops[instrOp].grid === gname; });
   h += '<div class="panel"><h2>Permutation grid</h2><div class="tabs optabs">';
   OPS.forEach(function(op){ h += '<button data-op="'+op+'" aria-pressed="'+(instrOp===op)+'">'+op+'</button>'; });
   h += '</div>' + mgrHtml("grid", keysOf(st.grids[instrOp]), gname, {label:'Grid used for '+instrOp+' in this Topic', locked:!editable, noun:'the grid "'+gname+'"'});
   var oedit = oname !== "Unity", oset = st.operandSets[instrOp][oname];
-  h += '<h2 style="font-size:.95rem;margin-top:14px">Operand weights for '+instrOp+'</h2>' + mgrHtml("opset", keysOf(st.operandSets[instrOp]), oname, {label:'Operand weights set used in this Topic', locked:!oedit, noun:'the operand weights set "'+oname+'"'});
-  h += '<div class="gridwrap"><table class="g ow"><tr class="lbl"><th></th>';
-  for (var q=0;q<N;q++) h += '<th>'+q+'</th>'; h += '</tr>';
-  ['a','b'].forEach(function(side){ h += '<tr><th>'+side.toUpperCase()+'</th>';
-    for (var q2=0;q2<N;q2++){ var odis = !oedit || (instrOp==="Division" && side==="a" && q2===0);
-      h += '<td><input type="number" min="0" step="any" data-side="'+side+'" data-i="'+q2+'" aria-label="Operand '+side.toUpperCase()+' weight for '+q2+'" value="'+oset[side][q2]+'"'+(odis?' disabled':'')+'></td>'; }
-    h += '</tr>'; });
-  h += '</table></div><p class="note">Each pair\u2019s weight is its grid weight \u00d7 the Operand A weight \u00d7 the Operand B weight.</p>';
-  h += '<h2 style="font-size:.95rem;margin-top:14px">Grid weights for '+instrOp+'</h2>';
-  h += '<p class="note">'+(editable ? 'Columns are Operand A, rows are Operand B.' : 'Unity gives every pair the same weight (1). Choose another grid, or use Save As, to edit weights.')+(instrOp==="Division"?' In Division, Operand A = 0 is never asked.':'')+(others.length && editable ? ' Editing this grid also changes it in: '+esc(others.join(", "))+'.' : '')+'</p>';
-  h += '<div class="gridwrap"><table class="g gt"><tr class="lbl"><th>B \\ A</th>';
+  h += mgrHtml("opset", keysOf(st.operandSets[instrOp]), oname, {label:'Operand weights set for '+instrOp, locked:!oedit, noun:'the operand weights set "'+oname+'"'});
+  h += '<p class="note">'+(editable ? 'Columns are Operand A, rows are Operand B.' : 'Unity gives every pair the same weight (1). Choose another grid, or use Save As, to edit weights.')+' The shaded boxes (top row and left column) are the Operand A and Operand B weights. Each pair\u2019s weight is its grid weight \u00d7 its Operand A weight \u00d7 its Operand B weight.'+(instrOp==="Division"?' In Division, Operand A = 0 is never asked.':'')+(others.length && editable ? ' Editing this grid also changes it in: '+esc(others.join(", "))+'.' : '')+'</p>';
+  h += '<div class="gridwrap"><table class="g gt"><tr class="lbl"><th>B \\ A</th><th>B wt</th>';
   for (var a=0;a<N;a++) h += '<th>'+a+'</th>'; h += '</tr>';
+  h += '<tr><th>A wt</th><td></td>';
+  for (var q2=0;q2<N;q2++){ var odisA = !oedit || (instrOp==="Division" && q2===0);
+    h += '<td><input class="wt" type="number" min="0" step="any" data-side="a" data-i="'+q2+'" aria-label="Operand A weight for '+q2+'" value="'+oset.a[q2]+'"'+(odisA?' disabled':'')+'></td>'; }
+  h += '</tr>';
   var show = st.grids[instrOp][gname];
-  for (var b=0;b<N;b++){ h += '<tr><th>'+b+'</th>';
+  for (var b=0;b<N;b++){ h += '<tr><th>'+b+'</th><td><input class="wt" type="number" min="0" step="any" data-side="b" data-i="'+b+'" aria-label="Operand B weight for '+b+'" value="'+oset.b[b]+'"'+(!oedit?' disabled':'')+'></td>';
     for (var a2=0;a2<N;a2++){
       var dis = !editable || (instrOp==="Division" && a2===0);
       h += '<td><input type="number" min="0" step="any" data-a="'+a2+'" data-b="'+b+'" aria-label="Operand A '+a2+', Operand B '+b+'" value="'+show[a2][b]+'"'+(dis?' disabled':'')+'></td>'; }
     h += '</tr>'; }
   h += '</table></div>';
   if (editable){
-    h += '<div class="row" style="margin-top:10px"><div><label for="setall">Set every cell to</label><input type="number" min="0" step="any" id="setall" value="1"></div><button id="applyall">Apply</button></div>';
+    h += '<div class="row" style="margin-top:10px"><div><label for="setall">Set every grid cell to</label><input type="number" min="0" step="any" id="setall" value="1"></div><button id="applyall">Apply</button></div>';
   }
   h += '</div>';
   return h;
@@ -625,7 +636,7 @@ function bindTopic(){
   $("autoop").onchange = function(){ topic.autoOps = this.checked; if (this.checked) OPS.forEach(function(op){ topic.ops[op].secondary = cellWeights(st, topic, op).total; }); save(); showInstructor("topic"); };
   OPS.forEach(function(op){ $("sw-"+op).onchange = function(){ var v = parseFloat(this.value); if (!(v >= 0)) return showInstructor("topic","Weights must be 0 or more."); topic.ops[op].secondary = v; save(); }; });
   $("sel-opset").onchange = function(){ topic.ops[instrOp].operandSet = this.value; save(); mgr = null; showInstructor(); };
-  Array.prototype.forEach.call(app.querySelectorAll("table.ow input"), function(inp){
+  Array.prototype.forEach.call(app.querySelectorAll("input[data-side]"), function(inp){
     inp.onchange = function(){ var v = parseFloat(this.value); if (!(v >= 0)) return showInstructor("topic","Weights must be 0 or more.");
       st.operandSets[instrOp][oname][this.getAttribute("data-side")][+this.getAttribute("data-i")] = v; save(); refreshSecondary(); };
   });
@@ -635,7 +646,7 @@ function bindTopic(){
     var v = parseFloat(this.value); if (!(v >= 0)){ return showInstructor("topic","Weights must be 0 or more."); }
     topic.ops[op].primary = v; save(); }; });
   Array.prototype.forEach.call(app.querySelectorAll("[data-op]"), function(b){ b.onclick = function(){ instrOp = b.getAttribute("data-op"); mgr = null; showInstructor("topic"); }; });
-  Array.prototype.forEach.call(app.querySelectorAll("table.gt input"), function(inp){
+  Array.prototype.forEach.call(app.querySelectorAll("input[data-a]"), function(inp){
     inp.onchange = function(){
       var v = parseFloat(this.value);
       if (!(v >= 0)){ return showInstructor("topic","Weights must be 0 or more."); }
@@ -656,8 +667,9 @@ function goalHtml(){
       h += '<td><input type="number" min="0" step="any" data-r="'+r+'" data-c="'+c2+'" aria-label="'+m+', Criteria'+(c2+1)+'" value="'+(v===null?"":v)+'"></td>'; }
     h += '</tr>'; });
   h += '</table></div>';
-  h += '<div class="row" style="margin-top:12px"><div class="capwrap"><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
-  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents completion of the Practice.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for stretch goals.</p><p class="note">A column made only of % Correct or Avg Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p></div>';
+  h += '<p class="note"><b>Highly recommended:</b> make one Criteria column a "Fallback" goal that can reasonably be reached even if something goes wrong, or if stretch goals in the other columns turn out to be out of reach. Without a fallback, a student may be unable to finish a Practice. Also instruct students to ask for help if an issue prevents completion of the Practice.</p><p class="note">A fallback goal with a higher Correct Response requirement gives students a reason to try for stretch goals.</p><p class="note">A column made only of % Correct or Avg Time can end a Practice after the first question. Add a count or a streak if you want a minimum number of questions.</p>';
+  h += '<div class="row" style="margin-top:4px"><div class="capwrap"><label for="cap">Response Time Cap (seconds)</label><input type="number" min="1" step="any" id="cap" value="'+g.cap+'"></div></div>';
+  h += '</div>';
   return h;
 }
 function bindGoal(){
